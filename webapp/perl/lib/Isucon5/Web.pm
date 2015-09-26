@@ -182,7 +182,21 @@ get '/logout' => [qw(set_global)] => sub {
 
 get '/' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
-    my $all_friends = get_friends(current_user()->{id});
+
+    my $friends_query = 'SELECT * FROM relations WHERE one = ? ORDER BY id DESC';
+    my %friends = ();
+    my $friends = [];
+    for my $rel (@{db->select_all($friends_query, current_user()->{id}, current_user()->{id})}) {
+        my $key = ($rel->{one} == current_user()->{id} ? 'another' : 'one');
+        $friends{$rel->{$key}} ||= do {
+            my $friend = get_user($rel->{$key});
+            $rel->{account_name} = $friend->{account_name};
+            $rel->{nick_name} = $friend->{nick_name};
+            push @$friends, $rel;
+            $rel;
+        };
+    }
+    my $all_friends = [map { $_->{id} } @$friends];
     my $friends_placeholder = join ',', ( ('?') x scalar @$all_friends );
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
@@ -218,7 +232,7 @@ SQL
     for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
-        my $owner = get_user($entry->{user_id});
+        my $owner = $friends{$entry->{user_id}};
         $entry->{account_name} = $owner->{account_name};
         $entry->{nick_name} = $owner->{nick_name};
         push @$entries_of_friends, $entry;
@@ -230,29 +244,15 @@ SQL
         my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
         $entry->{is_private} = ($entry->{private} == 1);
         next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = get_user($entry->{user_id});
+        my $entry_owner = $friends{$entry->{user_id}};
         $entry->{account_name} = $entry_owner->{account_name};
         $entry->{nick_name} = $entry_owner->{nick_name};
         $comment->{entry} = $entry;
-        my $comment_owner = get_user($comment->{user_id});
+        my $comment_owner = $friends{$comment->{user_id}};
         $comment->{account_name} = $comment_owner->{account_name};
         $comment->{nick_name} = $comment_owner->{nick_name};
         push @$comments_of_friends, $comment;
         last if @$comments_of_friends+0 >= 10;
-    }
-
-    my $friends_query = 'SELECT * FROM relations WHERE one = ? ORDER BY id DESC';
-    my %friends = ();
-    my $friends = [];
-    for my $rel (@{db->select_all($friends_query, current_user()->{id}, current_user()->{id})}) {
-        my $key = ($rel->{one} == current_user()->{id} ? 'another' : 'one');
-        $friends{$rel->{$key}} ||= do {
-            my $friend = get_user($rel->{$key});
-            $rel->{account_name} = $friend->{account_name};
-            $rel->{nick_name} = $friend->{nick_name};
-            push @$friends, $rel;
-            $rel;
-        };
     }
 
     my $query = <<SQL;
