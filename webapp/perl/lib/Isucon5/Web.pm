@@ -84,7 +84,7 @@ sub current_user {
 
     return undef if (!session()->{user_id});
 
-    $user = $USERS_MAP{session()->{user_id}};
+    $user = $USER_MAP{session()->{user_id}};
     if (!$user) {
         session()->{user_id} = undef;
         abort_authentication_error();
@@ -94,7 +94,7 @@ sub current_user {
 
 sub get_user {
     my ($user_id) = @_;
-    my $user = $USERS_MAP{$user_id};
+    my $user = $USER_MAP{$user_id};
     abort_content_not_found() if (!$user);
     return $user;
 }
