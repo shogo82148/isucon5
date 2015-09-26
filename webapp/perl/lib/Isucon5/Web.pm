@@ -500,7 +500,7 @@ FROM footprints_cache f
 JOIN users u ON u.id = f.owner_id
 WHERE user_id = ?
 GROUP BY created_date, user_id, owner_id
-ORDER BY created_date, updated DESC
+ORDER BY created_date DESC, updated DESC
 LIMIT 50
 SQL
     my $footprints = db->select_all($query, current_user()->{id});
