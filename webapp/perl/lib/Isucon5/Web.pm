@@ -232,7 +232,7 @@ SQL
 
     my $latest_entries_id = db->select_one("SELECT id FROM entries ORDER BY id DESC LIMIT 1");
     my $cursor_entries_id = $latest_entries_id;
-    while (scalar(@entries_of_friends) < 10 || $cursor_entries_id <= 0) {
+    while (scalar(@$entries_of_friends) < 10 || $cursor_entries_id <= 0) {
         for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) AND id <= ? AND id > ? ORDER BY id DESC LIMIT 10", @$all_friends, $cursor_entries_id, $cursor_entries_id - 100)}) {
             my ($title) = split(/\n/, $entry->{body});
             $entry->{title} = $title;
@@ -248,7 +248,7 @@ SQL
     my $comments_of_friends = [];
     my $latest_comments_id = db->select_one("SELECT id FROM comments ORDER BY id DESC LIMIT 1");
     my $cursor_comments_id = $latest_comments_id;
-    while (scalar(@entries_of_friends) < 10 || $cursor_entries_id <= 0) {
+    while (scalar(@$comments_of_friends) < 10 || $cursor_entries_id <= 0) {
         for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) WHERE id <= ? AND id > ? ORDER BY id DESC LIMIT 1000", @$all_friends, $cursor_comments_id, $cursor_comments_id - 100)}) {
             my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
             $entry->{is_private} = ($entry->{private} == 1);
