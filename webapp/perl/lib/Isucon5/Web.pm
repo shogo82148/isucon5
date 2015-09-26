@@ -182,16 +182,13 @@ get '/logout' => [qw(set_global)] => sub {
 
 get '/' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
+    my $my_id = current_user()->{id};
 
-    my $friends_query = 'SELECT * FROM relations WHERE one = ? ORDER BY id DESC';
+    my $friends_query = 'SELECT * FROM relations JOIN users ON users.id = relations.another WHERE one = ? ORDER BY relations.id DESC';
     my %friends = ();
     my $friends = [];
-    for my $rel (@{db->select_all($friends_query, current_user()->{id}, current_user()->{id})}) {
-        my $key = ($rel->{one} == current_user()->{id} ? 'another' : 'one');
-        $friends{$rel->{$key}} ||= do {
-            my $friend = get_user($rel->{$key});
-            $rel->{account_name} = $friend->{account_name};
-            $rel->{nick_name} = $friend->{nick_name};
+    for my $rel (@{db->select_all($friends_query, current_user()->{id})}) {
+        $friends{$rel->{another}} ||= do {
             push @$friends, $rel;
             $rel;
         };
@@ -243,8 +240,8 @@ SQL
     for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
         my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
         $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = $friends{$entry->{user_id}};
+        next if ($entry->{is_private} && !$friends{$entry->{user_id}} && $entry->{user_id} != $my_id);
+        my $entry_owner = $entry->{user_id} != $my_id ? $friends{$entry->{user_id}} : current_user();
         $entry->{account_name} = $entry_owner->{account_name};
         $entry->{nick_name} = $entry_owner->{nick_name};
         $comment->{entry} = $entry;
