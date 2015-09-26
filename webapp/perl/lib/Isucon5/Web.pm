@@ -195,6 +195,7 @@ get '/' => [qw(set_global authenticated)] => sub {
     }
     my $all_friends = [map { $_->{id} } @$friends];
     my $friends_placeholder = join ',', ( ('?') x scalar @$all_friends );
+    my %user_cache = %friends;
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
 
@@ -241,11 +242,11 @@ SQL
         my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
         $entry->{is_private} = ($entry->{private} == 1);
         next if ($entry->{is_private} && !$friends{$entry->{user_id}} && $entry->{user_id} != $my_id);
-        my $entry_owner = $entry->{user_id} != $my_id ? $friends{$entry->{user_id}} : current_user();
+        my $entry_owner = ($user_cache{$entry->{user_id}} ||= get_user($entry->{user_id}));
         $entry->{account_name} = $entry_owner->{account_name};
         $entry->{nick_name} = $entry_owner->{nick_name};
         $comment->{entry} = $entry;
-        my $comment_owner = $friends{$comment->{user_id}};
+        my $comment_owner = ($user_cache{$comment->{user_id}} ||= get_user($entry->{user_id}));
         $comment->{account_name} = $comment_owner->{account_name};
         $comment->{nick_name} = $comment_owner->{nick_name};
         push @$comments_of_friends, $comment;
