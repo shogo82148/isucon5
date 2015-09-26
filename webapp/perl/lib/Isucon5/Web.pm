@@ -9,6 +9,7 @@ use Encode;
 use Redis::Fast;
 use Data::MessagePack;
 use Digest::SHA qw/sha512_hex/;
+use Isucon5::Users;
 
 my $db;
 sub db {
@@ -106,7 +107,7 @@ sub current_user {
 
 sub get_user {
     my ($user_id) = @_;
-    my $user = db->select_row('SELECT * FROM users WHERE id = ?', $user_id);
+    my $user = $Isucon5::Users::USERS->{$user_id} || db->select_row('SELECT * FROM users WHERE id = ?', $user_id);
     abort_content_not_found() if (!$user);
     return $user;
 }
