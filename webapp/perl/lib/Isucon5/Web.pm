@@ -6,6 +6,7 @@ use utf8;
 use Kossy;
 use DBIx::Sunny;
 use Encode;
+use Digest::SHA qw/sha512_base64/;
 
 my $db;
 my %USER;
@@ -66,13 +67,13 @@ sub abort_content_not_found {
 sub authenticate {
     my ($email, $password) = @_;
     my $query = <<SQL;
-SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email
-FROM users u
+SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email,
+s.salt AS salt, u.passhash AS hash u.FROM users u
 JOIN salts s ON u.id = s.user_id
-WHERE u.email = ? AND u.passhash = SHA2(CONCAT(?, s.salt), 512)
+WHERE u.email = ?;
 SQL
     my $result = db->select_row($query, $email, $password);
-    if (!$result) {
+    if (!$result || sha512_base64($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
     session()->{user_id} = $result->{id};
