@@ -8,25 +8,33 @@ use DBIx::Sunny;
 use Encode;
 
 my $db;
-sub db {
-    $db ||= do {
-        my %db = (
-            host => $ENV{ISUCON5_DB_HOST} || 'localhost',
-            port => $ENV{ISUCON5_DB_PORT} || 3306,
-            username => $ENV{ISUCON5_DB_USER} || 'root',
-            password => $ENV{ISUCON5_DB_PASSWORD},
-            database => $ENV{ISUCON5_DB_NAME} || 'isucon5q',
-        );
-        DBIx::Sunny->connect(
-            "dbi:mysql:database=$db{database};host=$db{host};port=$db{port}", $db{username}, $db{password}, {
-                RaiseError => 1,
-                PrintError => 0,
-                AutoInactiveDestroy => 1,
-                mysql_enable_utf8   => 1,
-                mysql_auto_reconnect => 1,
-            },
-        );
-    };
+my %USER;
+
+BEGIN {
+    sub db {
+        $db ||= do {
+            my %db = (
+                host => $ENV{ISUCON5_DB_HOST} || 'localhost',
+                port => $ENV{ISUCON5_DB_PORT} || 3306,
+                username => $ENV{ISUCON5_DB_USER} || 'root',
+                password => $ENV{ISUCON5_DB_PASSWORD},
+                database => $ENV{ISUCON5_DB_NAME} || 'isucon5q',
+            );
+            DBIx::Sunny->connect(
+                "dbi:mysql:database=$db{database};host=$db{host};port=$db{port}", $db{username}, $db{password}, {
+                    RaiseError => 1,
+                    PrintError => 0,
+                    AutoInactiveDestroy => 1,
+                    mysql_enable_utf8   => 1,
+                    mysql_auto_reconnect => 1,
+                },
+            );
+        };
+    }
+
+    for my $user (@{db->select_all('SELECT * FROM users')}) {
+        $USER{ $user->{id} } = $user;
+    }
 }
 
 my ($SELF, $C);
@@ -86,8 +94,6 @@ sub current_user {
     }
     return $user;
 }
-
-my %USER;
 
 sub get_user {
     my ($user_id) = @_;
@@ -478,10 +484,6 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
-
-    for my $user ( db->select_all('SELECT * FROM users') ) {
-        $USER{ $user->id } = $user;
-    }
 };
 
 sub get_friends {
