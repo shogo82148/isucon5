@@ -24,7 +24,7 @@ sub db {
                 PrintError => 0,
                 AutoInactiveDestroy => 1,
                 mysql_enable_utf8   => 1,
-                mysql_auto_reconnect => 0,
+                mysql_auto_reconnect => 1,
             },
         );
     };
