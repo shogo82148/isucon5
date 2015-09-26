@@ -138,7 +138,7 @@ sub mark_footprint {
         my $query = 'INSERT INTO footprints (user_id,owner_id) VALUES (?,?)';
         db->query($query, $user_id, current_user()->{id});
 
-        $query = 'INSERT INTO footprints_cache (user_id, owner_id, created_date) VALUES (?, ?, DATE(NOW())) ON DUPLICATE KEY UPDATE updated_at = NOW()';
+        $query = 'INSERT INTO footprints_cache (user_id, owner_id, created_date, updated_at) VALUES (?, ?, DATE(NOW()), NOW()) ON DUPLICATE KEY UPDATE updated_at = NOW()';
         db->query($query, $user_id, current_user()->{id});
     }
 }
