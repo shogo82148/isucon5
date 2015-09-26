@@ -460,7 +460,12 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
         my %entry_user_friends = map { $_ => 1 } @{get_friends($entry->{user_id})};
         $target_users = [ grep { $entry_user_friends{$_} } @$target_users];
     }
-    redis->lpush("comments_of_friends:$_", $comment_mp) for @$target_users;
+    for my $user_id (@$target_users) {
+        my $key = "comments_of_friends:$user_id";
+        if (redis->llen($key) > 0) {
+            redis->lpush($key, $comment_mp);
+        }
+    }
 
     redirect('/diary/entry/'.$entry->{id});
 };
