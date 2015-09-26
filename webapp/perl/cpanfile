@@ -3,5 +3,5 @@ requires "DBIx::Sunny";
 
 requires "DBD::mysql";
 #requires "Starman";
-requireds "Gazelle";
+requires "Gazelle";
 requires "Plack::Session";
