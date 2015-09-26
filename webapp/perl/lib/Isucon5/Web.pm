@@ -432,20 +432,15 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
 get '/footprints' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
     my $query = <<SQL;
-SELECT user_id, owner_id, DATE(created_at) AS date, MAX(created_at) as updated
-FROM footprints
+SELECT f.user_id AS user_id, f.owner_id AS owner_id, u.account_name AS account_name, u.nick_name AS nick_name, DATE(created_at) AS date, MAX(created_at) as updated
+FROM footprints f
 WHERE user_id = ?
+JOIN users u ON u.id = f.owner_id
 GROUP BY user_id, owner_id, DATE(created_at)
 ORDER BY updated DESC
 LIMIT 50
 SQL
-    my $footprints = [];
-    for my $fp (@{db->select_all($query, current_user()->{id})}) {
-        my $owner = get_user($fp->{owner_id});
-        $fp->{account_name} = $owner->{account_name};
-        $fp->{nick_name} = $owner->{nick_name};
-        push @$footprints, $fp;
-    }
+    my $footprints = db->select_all($query, current_user()->{id});
     $c->render('footprints.tx', { footprints => $footprints });
 };
 
