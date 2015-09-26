@@ -8,6 +8,7 @@ use DBIx::Sunny;
 use Encode;
 use Redis::Fast;
 use Data::MessagePack;
+use Digest::SHA qw/sha512_hex/;
 
 my $db;
 sub db {
@@ -74,13 +75,13 @@ sub abort_content_not_found {
 sub authenticate {
     my ($email, $password) = @_;
     my $query = <<SQL;
-SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email
-FROM users u
+SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email,
+s.salt AS salt, u.passhash AS hash FROM users u
 JOIN salts s ON u.id = s.user_id
-WHERE u.email = ? AND u.passhash = SHA2(CONCAT(?, s.salt), 512)
+WHERE u.email = ?;
 SQL
-    my $result = db->select_row($query, $email, $password);
-    if (!$result) {
+    my $result = db->select_row($query, $email);
+    if (!$result || sha512_hex($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
     session()->{user_id} = $result->{id};
@@ -335,7 +336,7 @@ get '/profile/:account_name' => [qw(set_global authenticated)] => sub {
 post '/profile/:account_name' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
     my $account_name = $c->args->{account_name};
-    if ($account_name != current_user()->{account_name}) {
+    if ($account_name ne current_user()->{account_name}) {
         abort_permission_denied();
     }
     my $first_name =  $c->req->param('first_name');
