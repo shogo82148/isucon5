@@ -6,6 +6,8 @@ use utf8;
 use Kossy;
 use DBIx::Sunny;
 use Encode;
+use Redis::Fast;
+use Data::MessagePack;
 
 my $db;
 sub db {
@@ -28,6 +30,20 @@ sub db {
         );
     };
 }
+
+my $redis;
+sub redis {
+    $redis ||= do {
+        Redis::Fast->new(
+            encoding  => undef,
+            reconnect => 5,
+            every     => 200,
+        );
+    };
+}
+
+my $mp;
+sub mp { $mp ||= Data::MessagePack->new()->utf8; }
 
 my ($SELF, $C);
 sub session {
@@ -225,20 +241,24 @@ SQL
         last if @$entries_of_friends+0 >= 10;
     }
 
-    my $comments_of_friends = [];
-    for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
-        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
-        $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = get_user($entry->{user_id});
-        $entry->{account_name} = $entry_owner->{account_name};
-        $entry->{nick_name} = $entry_owner->{nick_name};
-        $comment->{entry} = $entry;
-        my $comment_owner = get_user($comment->{user_id});
-        $comment->{account_name} = $comment_owner->{account_name};
-        $comment->{nick_name} = $comment_owner->{nick_name};
-        push @$comments_of_friends, $comment;
-        last if @$comments_of_friends+0 >= 10;
+    my $current_user_id = current_user()->{id};
+    my $comments_of_friends = [map {mp->unpack($_)} redis->lrange("comments_of_friends:$current_user_id", 0, 9)];
+    if (@$comments_of_friends == 0) {
+        for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
+            my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
+            $entry->{is_private} = ($entry->{private} == 1);
+            next if ($entry->{is_private} && !permitted($entry->{user_id}));
+            my $entry_owner = get_user($entry->{user_id});
+            $entry->{account_name} = $entry_owner->{account_name};
+            $entry->{nick_name} = $entry_owner->{nick_name};
+            $comment->{entry} = $entry;
+            my $comment_owner = get_user($comment->{user_id});
+            $comment->{account_name} = $comment_owner->{account_name};
+            $comment->{nick_name} = $comment_owner->{nick_name};
+            push @$comments_of_friends, $comment;
+            redis->rpush("comments_of_friends:$current_user_id", mp->pack($comment));
+            last if @$comments_of_friends+0 >= 10;
+        }
     }
 
     my $friends_query = 'SELECT * FROM relations WHERE one = ? ORDER BY id DESC';
@@ -413,6 +433,7 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
     my $entry_id = $c->args->{entry_id};
     my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $entry_id);
+    my $entry_user = get_user($entry->{user_id});
     abort_content_not_found() if (!$entry);
     $entry->{is_private} = ($entry->{private} == 1);
     if ($entry->{is_private} && !permitted($entry->{user_id})) {
@@ -421,6 +442,26 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
     my $query = 'INSERT INTO comments (entry_id, user_id, comment) VALUES (?,?,?)';
     my $comment = $c->req->param('comment');
     db->query($query, $entry->{id}, current_user()->{id}, $comment);
+    my $comment_mp = mp->pack({
+        entry_id     => $entry_id,
+        user_id      => current_user()->{id},
+        comment      => $comment,
+        account_name => current_user()->{account_name},
+        nick_name    => current_user()->{nick_name},
+        entry => {
+            %$entry,
+            account_name => $entry_user->{account_name},
+            nick_name    => $entry_user->{nick_name},
+        },
+    });
+
+    my $target_users = get_friends(current_user()->{id});
+    if ($entry->{is_private}) {
+        my %entry_user_friends = map { $_ => 1 } @{get_friends($entry->{user_id})};
+        $target_users = [ grep { $entry_user_friends{$_} } @$target_users];
+    }
+    redis->lpush("comments_of_friends:$_", $comment_mp) for @$target_users;
+
     redirect('/diary/entry/'.$entry->{id});
 };
 
@@ -465,6 +506,8 @@ post '/friends/:account_name' => [qw(set_global authenticated)] => sub {
         my $user = user_from_account($account_name);
         abort_content_not_found() if (!$user);
         db->query('INSERT INTO relations (one, another) VALUES (?,?), (?,?)', current_user()->{id}, $user->{id}, $user->{id}, current_user()->{id});
+        redis->del("comments_of_friends:".current_user()->{id});
+        redis->del("comments_of_friends:".$user->{id});
         redirect('/friends');
     }
 };
@@ -475,6 +518,7 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
+    redis->flushall();
 };
 
 sub get_friends {
