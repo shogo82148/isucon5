@@ -87,8 +87,11 @@ sub current_user {
     return $user;
 }
 
+my %USER;
+
 sub get_user {
     my ($user_id) = @_;
+    return $USER{ $user_id } if $USER{ $user_id };
     my $user = db->select_row('SELECT * FROM users WHERE id = ?', $user_id);
     abort_content_not_found() if (!$user);
     return $user;
@@ -475,6 +478,10 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
+
+    for my $user ( db->select_all('SELECT * FROM users') ) {
+        $USER{ $user->id } = $user;
+    }
 };
 
 sub get_friends {
