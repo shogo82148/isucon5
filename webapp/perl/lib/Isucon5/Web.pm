@@ -506,8 +506,11 @@ post '/friends/:account_name' => [qw(set_global authenticated)] => sub {
         my $user = user_from_account($account_name);
         abort_content_not_found() if (!$user);
         db->query('INSERT INTO relations (one, another) VALUES (?,?), (?,?)', current_user()->{id}, $user->{id}, $user->{id}, current_user()->{id});
-        redis->del("comments_of_friends:".current_user()->{id});
-        redis->del("comments_of_friends:".$user->{id});
+        redis->del("comments_of_friends:$_") for (
+            current_user()->{id}, $user->{id},
+            @{get_friends(current_user()->{id})},
+            @{get_friends($user->{id})},
+        );
         redirect('/friends');
     }
 };
