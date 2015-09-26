@@ -60,11 +60,11 @@ sub authenticate {
     my ($email, $password) = @_;
     my $query = <<SQL;
 SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email,
-s.salt AS salt, u.passhash AS hash u.FROM users u
+s.salt AS salt, u.passhash AS hash FROM users u
 JOIN salts s ON u.id = s.user_id
 WHERE u.email = ?;
 SQL
-    my $result = db->select_row($query, $email, $password);
+    my $result = db->select_row($query, $email);
     if (!$result || sha512_base64($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
