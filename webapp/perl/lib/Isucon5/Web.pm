@@ -214,7 +214,7 @@ SQL
 
     my $entries_of_friends = [];
     my $user_id = current_user()->{id};
-    for my $entry (@{db->select_all('SELECT * FROM entries e, relations r WHERE r.one = e.user_id AND r.another = ? ORDER BY created_at DESC LIMIT 1000', [$user_id])}) {
+    for my $entry (@{db->select_all('SELECT * FROM entries e, relations r WHERE r.one = e.user_id AND r.another = ? ORDER BY e.created_at DESC LIMIT 1000', [$user_id])}) {
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
         my $owner = get_user($entry->{user_id});
