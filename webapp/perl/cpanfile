@@ -2,7 +2,8 @@ requires "Kossy", 0.38;
 requires "DBIx::Sunny";
 
 requires "DBD::mysql";
-requires "Starman";
+#requires "Starman";
+requireds "Gazelle";
 requires "Plack::Session";
 requires "Redis::Fast";
 requires "Data::MessagePack";
