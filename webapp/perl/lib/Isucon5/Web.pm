@@ -442,10 +442,9 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
     my $query = 'INSERT INTO comments (entry_id, user_id, comment) VALUES (?,?,?)';
     my $comment = $c->req->param('comment');
     db->query($query, $entry->{id}, current_user()->{id}, $comment);
+    my $comment_hash = db->select_row("SELECT * FROM comments WHERE id = ?", db->last_insert_id);
     my $comment_mp = mp->pack({
-        entry_id     => $entry_id,
-        user_id      => current_user()->{id},
-        comment      => $comment,
+        %$comment_hash,
         account_name => current_user()->{account_name},
         nick_name    => current_user()->{nick_name},
         entry => {
