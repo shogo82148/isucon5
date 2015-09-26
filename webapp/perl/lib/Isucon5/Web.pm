@@ -62,6 +62,9 @@ sub abort_content_not_found {
 
 sub authenticate {
     my ($email, $password) = @_;
+    if (length($email)>1000 || length($password)>1000) {
+        abort_authentication_error();
+    }
     my $query = <<SQL;
 SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email,
 s.salt AS salt, u.passhash AS hash FROM users u
