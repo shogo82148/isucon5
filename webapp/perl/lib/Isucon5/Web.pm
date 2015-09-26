@@ -187,7 +187,7 @@ get '/' => [qw(set_global authenticated)] => sub {
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
 
-    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY created_at LIMIT 5';
+    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY id LIMIT 5';
     my $entries = [];
     for my $entry (@{db->select_all($entries_query, current_user()->{id})}) {
         $entry->{is_private} = ($entry->{private} == 1);
@@ -202,7 +202,7 @@ SELECT c.id AS id, c.entry_id AS entry_id, c.user_id AS user_id, c.comment AS co
 FROM comments c
 JOIN entries e ON c.entry_id = e.id
 WHERE e.user_id = ?
-ORDER BY c.created_at DESC
+ORDER BY c.id DESC
 LIMIT 10
 SQL
     my $comments_for_me = [];
@@ -215,7 +215,7 @@ SQL
     }
 
     my $entries_of_friends = [];
-    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY created_at DESC LIMIT 10", @$all_friends)}) {
+    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
         next if (!is_friend($entry->{user_id}));
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
