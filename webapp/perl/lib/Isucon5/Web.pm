@@ -225,18 +225,30 @@ SQL
     }
 
     my $comments_of_friends = [];
-    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY id DESC LIMIT 1000')}) {
+    my $comments = db->select_all(<<SQL);
+SELECT
+  c.id AS id, c.entry_id AS entry_id, c.user_id AS user_id, c.comment AS comment, c.created_at AS created_at
+  , cu.account_name AS account_name, cu.nick_name AS nick_name
+  , e.id AS eid, e.user_id AS euser_id, e.private AS eprivate, e.body AS ebody
+FROM comments c
+JOIN entries e ON c.entry_id = e.id
+JOIN users eu ON eu.id = e.user_id
+JOIN users cu ON cu.id = c.user_id
+ORDER BY c.id DESC
+LIMIT 10
+SQL
+    for my $comment (@$comments) {
         next if (!is_friend($comment->{user_id}));
-        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
-        $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = get_user($entry->{user_id});
-        $entry->{account_name} = $entry_owner->{account_name};
-        $entry->{nick_name} = $entry_owner->{nick_name};
-        $comment->{entry} = $entry;
-        my $comment_owner = get_user($comment->{user_id});
-        $comment->{account_name} = $comment_owner->{account_name};
-        $comment->{nick_name} = $comment_owner->{nick_name};
+        next if ($comment->{eprivate} == 1 && !permitted($comment->{euser_id}));
+        $comment->{entry} = {
+            id           => $comment->{eid},
+            user_id      => $comment->{euser_id},
+            is_private   => ($comment->{eprivate} == 1),
+            body         => $comment->{ebody},
+            created_at   => $comment->{ecreated_at},
+            account_name => $comment->{eaccount_name},
+            nick_name    => $comment->{enick_name},
+        };
         push @$comments_of_friends, $comment;
         last if @$comments_of_friends+0 >= 10;
     }
