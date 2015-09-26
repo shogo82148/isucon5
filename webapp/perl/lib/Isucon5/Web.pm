@@ -185,7 +185,7 @@ get '/' => [qw(set_global authenticated)] => sub {
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
 
-    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY created_at LIMIT 5';
+    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY id LIMIT 5';
     my $entries = [];
     for my $entry (@{db->select_all($entries_query, current_user()->{id})}) {
         $entry->{is_private} = ($entry->{private} == 1);
@@ -200,7 +200,7 @@ SELECT c.id AS id, c.entry_id AS entry_id, c.user_id AS user_id, c.comment AS co
 FROM comments c
 JOIN entries e ON c.entry_id = e.id
 WHERE e.user_id = ?
-ORDER BY c.created_at DESC
+ORDER BY c.id DESC
 LIMIT 10
 SQL
     my $comments_for_me = [];
@@ -213,7 +213,7 @@ SQL
     }
 
     my $entries_of_friends = [];
-    for my $entry (@{db->select_all('SELECT * FROM entries ORDER BY created_at DESC LIMIT 1000')}) {
+    for my $entry (@{db->select_all('SELECT * FROM entries ORDER BY id DESC LIMIT 1000')}) {
         next if (!is_friend($entry->{user_id}));
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
@@ -225,7 +225,7 @@ SQL
     }
 
     my $comments_of_friends = [];
-    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY created_at DESC LIMIT 1000')}) {
+    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY id DESC LIMIT 1000')}) {
         next if (!is_friend($comment->{user_id}));
         my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
         $entry->{is_private} = ($entry->{private} == 1);
@@ -241,7 +241,7 @@ SQL
         last if @$comments_of_friends+0 >= 10;
     }
 
-    my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY created_at DESC';
+    my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY id DESC';
     my %friends = ();
     my $friends = [];
     for my $rel (@{db->select_all($friends_query, current_user()->{id}, current_user()->{id})}) {
@@ -292,9 +292,9 @@ get '/profile/:account_name' => [qw(set_global authenticated)] => sub {
     $prof = {} if (!$prof);
     my $query;
     if (permitted($owner->{id})) {
-        $query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY created_at LIMIT 5';
+        $query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY id LIMIT 5';
     } else {
-        $query = 'SELECT * FROM entries WHERE user_id = ? AND private=0 ORDER BY created_at LIMIT 5';
+        $query = 'SELECT * FROM entries WHERE user_id = ? AND private=0 ORDER BY id LIMIT 5';
     }
     my $entries = [];
     for my $entry (@{db->select_all($query, $owner->{id})}) {
@@ -352,9 +352,9 @@ get '/diary/entries/:account_name' => [qw(set_global authenticated)] => sub {
     my $owner = user_from_account($account_name);
     my $query;
     if (permitted($owner->{id})) {
-        $query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY created_at DESC LIMIT 20';
+        $query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY id DESC LIMIT 20';
     } else {
-        $query = 'SELECT * FROM entries WHERE user_id = ? AND private=0 ORDER BY created_at DESC LIMIT 20';
+        $query = 'SELECT * FROM entries WHERE user_id = ? AND private=0 ORDER BY id DESC LIMIT 20';
     }
     my $entries = [];
     for my $entry (@{db->select_all($query, $owner->{id})}) {
@@ -451,7 +451,7 @@ SQL
 
 get '/friends' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
-    my $query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY created_at DESC';
+    my $query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY id DESC';
     my %friends = ();
     my $friends = [];
     for my $rel (@{db->select_all($query, current_user()->{id}, current_user()->{id})}) {
