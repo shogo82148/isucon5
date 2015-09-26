@@ -103,7 +103,7 @@ sub user_from_account {
 
 sub is_friend {
     my ($another_id) = @_;
-    my $user_id1 = session()->{user_id};
+    my $user_id = session()->{user_id};
     my $query = 'SELECT id FROM relations WHERE one = ? AND another = ?';
     my $exists = db->select_one($query, $user_id, $another_id);
     return $exists ? 1 : 0;
