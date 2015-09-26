@@ -30,7 +30,7 @@ sub db {
     };
 }
 
-my $USERS = db->select_all("SELECT * FROM user");
+my $USERS = db->select_all("SELECT * FROM users");
 my %USER_MAP = map { $_->{id} => $_ } @$USERS;
 my %USER_ACCOUNT_NAME_MAP = map { $_->{account_name} => $_ } @$USERS;
 
