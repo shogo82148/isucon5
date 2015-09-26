@@ -30,6 +30,10 @@ sub db {
     };
 }
 
+my $USERS = db->select_all("SELECT * FROM user");
+my %USER_MAP = map { $_->{id} => $_ } @$USERS;
+my %USER_ACCOUNT_NAME_MAP = map { $_->{account_name} => $_ } @$USERS;
+
 my ($SELF, $C);
 sub session {
     $C->stash->{session};
@@ -80,7 +84,7 @@ sub current_user {
 
     return undef if (!session()->{user_id});
 
-    $user = db->select_row('SELECT id, account_name, nick_name, email FROM users WHERE id=?', session()->{user_id});
+    $user = $USERS_MAP{session()->{user_id}};
     if (!$user) {
         session()->{user_id} = undef;
         abort_authentication_error();
@@ -90,14 +94,14 @@ sub current_user {
 
 sub get_user {
     my ($user_id) = @_;
-    my $user = db->select_row('SELECT * FROM users WHERE id = ?', $user_id);
+    my $user = $USERS_MAP{$user_id};
     abort_content_not_found() if (!$user);
     return $user;
 }
 
 sub user_from_account {
     my ($account_name) = @_;
-    my $user = db->select_row('SELECT * FROM users WHERE account_name = ?', $account_name);
+    my $user = $USER_ACCOUNT_NAME_MAP{$account_name};
     abort_content_not_found() if (!$user);
     return $user;
 }
