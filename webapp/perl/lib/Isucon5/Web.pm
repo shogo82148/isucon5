@@ -487,4 +487,10 @@ get '/initialize' => sub {
     db->query("DELETE FROM comments WHERE id > 1500000");
 };
 
+sub get_friends {
+    my $me = shift;
+    my $query = 'SELECT another FROM relations WHERE one = ?';
+    return [map {$_->{another}} @{db->select_all($query, $me)}];
+}
+
 1;
