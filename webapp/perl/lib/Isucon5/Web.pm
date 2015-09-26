@@ -182,10 +182,12 @@ get '/logout' => [qw(set_global)] => sub {
 
 get '/' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
+    my $all_friends = get_friends(current_user()->{id});
+    my $friends_placeholder = join ',', ( ('?') x scalar @$all_friends );
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
 
-    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY created_at LIMIT 5';
+    my $entries_query = 'SELECT * FROM entries WHERE user_id = ? ORDER BY id LIMIT 5';
     my $entries = [];
     for my $entry (@{db->select_all($entries_query, current_user()->{id})}) {
         $entry->{is_private} = ($entry->{private} == 1);
@@ -200,7 +202,7 @@ SELECT c.id AS id, c.entry_id AS entry_id, c.user_id AS user_id, c.comment AS co
 FROM comments c
 JOIN entries e ON c.entry_id = e.id
 WHERE e.user_id = ?
-ORDER BY c.created_at DESC
+ORDER BY c.id DESC
 LIMIT 10
 SQL
     my $comments_for_me = [];
@@ -213,8 +215,7 @@ SQL
     }
 
     my $entries_of_friends = [];
-    for my $entry (@{db->select_all('SELECT * FROM entries ORDER BY created_at DESC LIMIT 1000')}) {
-        next if (!is_friend($entry->{user_id}));
+    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
         my $owner = get_user($entry->{user_id});
@@ -225,8 +226,7 @@ SQL
     }
 
     my $comments_of_friends = [];
-    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY created_at DESC LIMIT 1000')}) {
-        next if (!is_friend($comment->{user_id}));
+    for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
         my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
         $entry->{is_private} = ($entry->{private} == 1);
         next if ($entry->{is_private} && !permitted($entry->{user_id}));
@@ -476,5 +476,11 @@ get '/initialize' => sub {
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
 };
+
+sub get_friends {
+    my $me = shift;
+    my $query = 'SELECT another FROM relations WHERE one = ?';
+    return [map {$_->{another}} @{db->select_all($query, $me)}];
+}
 
 1;
