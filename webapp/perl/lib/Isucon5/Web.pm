@@ -6,6 +6,8 @@ use utf8;
 use Kossy;
 use DBIx::Sunny;
 use Encode;
+use Redis::Fast;
+use Data::MessagePack;
 
 my $db;
 sub db {
@@ -25,6 +27,17 @@ sub db {
                 mysql_enable_utf8   => 1,
                 mysql_auto_reconnect => 1,
             },
+        );
+    };
+}
+
+my $redis;
+sub redis {
+    $redis ||= do {
+        Redis::Fast->new(
+            encoding  => undef,
+            reconnect => 5,
+            every     => 200,
         );
     };
 }
@@ -225,20 +238,27 @@ SQL
     }
 
     my $comments_of_friends = [];
-    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY id DESC LIMIT 1000')}) {
-        next if (!is_friend($comment->{user_id}));
-        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
-        $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = get_user($entry->{user_id});
-        $entry->{account_name} = $entry_owner->{account_name};
-        $entry->{nick_name} = $entry_owner->{nick_name};
-        $comment->{entry} = $entry;
-        my $comment_owner = get_user($comment->{user_id});
-        $comment->{account_name} = $comment_owner->{account_name};
-        $comment->{nick_name} = $comment_owner->{nick_name};
-        push @$comments_of_friends, $comment;
-        last if @$comments_of_friends+0 >= 10;
+    my $current_user_id = current_user()->{id};
+    my $mp = Data::MessagePack->new()->utf8;
+    if (my $comments_of_friends_cache = redis->get("comments_of_friends:$current_user_id")) {
+        $comments_of_friends = $mp->unpack($comments_of_friends_cache);
+    } else {
+        for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY created_at DESC LIMIT 1000')}) {
+            next if (!is_friend($comment->{user_id}));
+            my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
+            $entry->{is_private} = ($entry->{private} == 1);
+            next if ($entry->{is_private} && !permitted($entry->{user_id}));
+            my $entry_owner = get_user($entry->{user_id});
+            $entry->{account_name} = $entry_owner->{account_name};
+            $entry->{nick_name} = $entry_owner->{nick_name};
+            $comment->{entry} = $entry;
+            my $comment_owner = get_user($comment->{user_id});
+            $comment->{account_name} = $comment_owner->{account_name};
+            $comment->{nick_name} = $comment_owner->{nick_name};
+            push @$comments_of_friends, $comment;
+            last if @$comments_of_friends+0 >= 10;
+        }
+        redis->set("comments_of_friends:$current_user_id", $mp->pack($comments_of_friends));
     }
 
     my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY id DESC';
@@ -426,6 +446,7 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
     my $query = 'INSERT INTO comments (entry_id, user_id, comment) VALUES (?,?,?)';
     my $comment = $c->req->param('comment');
     db->query($query, $entry->{id}, current_user()->{id}, $comment);
+    clear_comment_cache(current_user()->{id});
     redirect('/diary/entry/'.$entry->{id});
 };
 
@@ -475,6 +496,7 @@ post '/friends/:account_name' => [qw(set_global authenticated)] => sub {
         my $user = user_from_account($account_name);
         abort_content_not_found() if (!$user);
         db->query('INSERT INTO relations (one, another) VALUES (?,?), (?,?)', current_user()->{id}, $user->{id}, $user->{id}, current_user()->{id});
+        clear_comment_cache(current_user()->{id});
         redirect('/friends');
     }
 };
@@ -485,6 +507,27 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
+
+    redis->flushall;
 };
+
+sub clear_comment_cache {
+    my $my_user_id = shift;
+    my $friends = get_friends($my_user_id);
+    for my $user_id (@$friends) {
+        redis->del("comments_of_friends:$user_id");
+    }
+}
+
+sub get_friends {
+    my $my_user_id = shift;
+    my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY created_at DESC';
+    my %friends = ();
+    for my $rel (@{db->select_all($friends_query, $my_user_id, $my_user_id)}) {
+        my $key = ($rel->{one} == $my_user_id ? 'another' : 'one');
+        $friends{$rel->{$key}} = 1;
+    }
+    return [keys %friends];
+}
 
 1;
