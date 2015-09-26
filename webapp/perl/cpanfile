@@ -5,3 +5,5 @@ requires "DBD::mysql";
 #requires "Starman";
 requires "Gazelle";
 requires "Plack::Session";
+requires "Redis::Fast";
+requires "Data::MessagePack";
