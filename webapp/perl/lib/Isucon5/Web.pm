@@ -199,6 +199,7 @@ get '/logout' => [qw(set_global)] => sub {
 
 get '/' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
+    my $current_user_id = current_user()->{id};
     my $all_friends = get_friends(current_user()->{id});
     my $friends_placeholder = join ',', ( ('?') x scalar @$all_friends );
 
@@ -231,18 +232,20 @@ SQL
         push @$comments_for_me, $comment;
     }
 
-    my $entries_of_friends = [];
-    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
-        my ($title) = split(/\n/, $entry->{body});
-        $entry->{title} = $title;
-        my $owner = get_user($entry->{user_id});
-        $entry->{account_name} = $owner->{account_name};
-        $entry->{nick_name} = $owner->{nick_name};
-        push @$entries_of_friends, $entry;
-        last if @$entries_of_friends+0 >= 10;
+    my $entries_of_friends = [map {mp->unpack($_)} redis->lrange("entries_of_friends:$current_user_id", 0, 9)];
+    if (@$entries_of_friends == 0) {
+        for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
+            my ($title) = split(/\n/, $entry->{body});
+            $entry->{title} = $title;
+            my $owner = get_user($entry->{user_id});
+            $entry->{account_name} = $owner->{account_name};
+            $entry->{nick_name} = $owner->{nick_name};
+            push @$entries_of_friends, $entry;
+            redis->rpush("entries_of_friends:$current_user_id", mp->pack($entry));
+            last if @$entries_of_friends+0 >= 10;
+        }
     }
 
-    my $current_user_id = current_user()->{id};
     my $comments_of_friends = [map {mp->unpack($_)} redis->lrange("comments_of_friends:$current_user_id", 0, 9)];
     if (@$comments_of_friends == 0) {
         for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
@@ -427,6 +430,20 @@ post '/diary/entry' => [qw(set_global authenticated)] => sub {
     my $private = $c->req->param('private');
     my $body = ($title || "タイトルなし") . "\n" . $content;
     db->query($query, current_user()->{id}, ($private ? '1' : '0'), $body);
+
+    my $entry = db->select_row("SELECT * FROM entries WHERE id = ?", db->last_insert_id);
+    $entry->{title} = $title;
+    $entry->{account_name} = current_user()->{account_name};
+    $entry->{nick_name} = current_user()->{nick_name};
+    my $entry_mp = mp->pack($entry);
+    my $target_users = get_friends(current_user()->{id});
+    for my $user_id (@$target_users) {
+        my $key = "entries_of_friends:$user_id";
+        if (redis->llen($key) > 0) {
+            redis->lpush($key, $entry_mp);
+        }
+    }
+
     redirect('/diary/entries/'.current_user()->{account_name});
 };
 
