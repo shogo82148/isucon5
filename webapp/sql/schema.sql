@@ -60,7 +60,15 @@ CREATE TABLE IF NOT EXISTS footprints (
   `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `user_id` int NOT NULL,
   `owner_id` int NOT NULL,
-  `cteated_date` date NOT NULL DEFAULT DATE(NOW()),
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY `user_id_owner_id_owner_id` (`user_id`, `owner_id`, `cteated_date`)
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) DEFAULT CHARSET=utf8;
+
+-- DROP TABLE IF EXISTS footprints_cache;
+CREATE TABLE IF NOT EXISTS footprints_cache (
+  `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_id` int NOT NULL,
+  `owner_id` int NOT NULL,
+  `created_date` date NOT NULL,
+  `updated_at` timestamp NOT NULL,
+  KEY `user_id_owner_id_owner_id` (`created_date`, `user_id`, `owner_id`)
 ) DEFAULT CHARSET=utf8;

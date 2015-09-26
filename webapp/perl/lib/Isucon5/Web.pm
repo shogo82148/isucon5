@@ -137,6 +137,9 @@ sub mark_footprint {
     if ($user_id != current_user()->{id}) {
         my $query = 'INSERT INTO footprints (user_id,owner_id) VALUES (?,?)';
         db->query($query, $user_id, current_user()->{id});
+
+        $query = 'INSERT INTO footprints_cache (user_id, owner_id, created_date) VALUES (?, ?, DATE(NOW())) ON DUPLICATE KEY UPDATE updated_at = NOW()';
+        db->query($query, $user_id, current_user()->{id});
     }
 }
 
@@ -281,12 +284,12 @@ SQL
     }
 
     my $query = <<SQL;
-SELECT f.user_id AS user_id, f.owner_id AS owner_id, u.account_name AS account_name, u.nick_name AS nick_name, DATE(created_at) AS date, MAX(created_at) as updated
-FROM footprints f
+SELECT f.user_id AS user_id, f.owner_id AS owner_id, u.account_name AS account_name, u.nick_name AS nick_name, created_date AS date, updated_at as updated
+FROM footprints_cache f
 JOIN users u ON u.id = f.owner_id
 WHERE user_id = ?
-GROUP BY user_id, owner_id, DATE(created_at)
-ORDER BY updated DESC
+GROUP BY created_date, user_id, owner_id
+ORDER BY created_date, updated DESC
 LIMIT 10
 SQL
     my $footprints = db->select_all($query, current_user()->{id});
@@ -491,12 +494,12 @@ post '/diary/comment/:entry_id' => [qw(set_global authenticated)] => sub {
 get '/footprints' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
     my $query = <<SQL;
-SELECT f.user_id AS user_id, f.owner_id AS owner_id, u.account_name AS account_name, u.nick_name AS nick_name, DATE(created_at) AS date, MAX(created_at) as updated
-FROM footprints f
+SELECT f.user_id AS user_id, f.owner_id AS owner_id, u.account_name AS account_name, u.nick_name AS nick_name, created_date AS date, updated_at as updated
+FROM footprints_cache f
 JOIN users u ON u.id = f.owner_id
 WHERE user_id = ?
-GROUP BY user_id, owner_id, DATE(created_at)
-ORDER BY updated DESC
+GROUP BY created_date, user_id, owner_id
+ORDER BY created_date, updated DESC
 LIMIT 50
 SQL
     my $footprints = db->select_all($query, current_user()->{id});
@@ -544,6 +547,15 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
+
+    db->query("TRUNCATE footprints_cache");
+    db->query(<<SQL);
+INSERT INTO footprints_cache (user_id, owner_id, created_date, updated_at)
+SELECT f.user_id AS user_id, f.owner_id AS owner_id, DATE(created_at) AS date, created_at AS updated_at
+FROM footprints f
+GROUP BY user_id, owner_id, date
+SQL
+
     redis->flushall();
 };
 
