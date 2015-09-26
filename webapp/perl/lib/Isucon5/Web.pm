@@ -24,7 +24,7 @@ sub db {
                 PrintError => 0,
                 AutoInactiveDestroy => 1,
                 mysql_enable_utf8   => 1,
-                mysql_auto_reconnect => 1,
+                mysql_auto_reconnect => 0,
             },
         );
     };
@@ -62,20 +62,13 @@ sub abort_content_not_found {
 
 sub authenticate {
     my ($email, $password) = @_;
-    if (length($email)>1000 || length($password)>1000) {
-        abort_authentication_error();
-    }
     my $query = <<SQL;
 SELECT u.id AS id, u.account_name AS account_name, u.nick_name AS nick_name, u.email AS email,
 s.salt AS salt, u.passhash AS hash FROM users u
 JOIN salts s ON u.id = s.user_id
 WHERE u.email = ?;
 SQL
-    my $result = eval { db->select_row($query, $email) };
-    if (my $e = $@) {
-        warn $email; warn $password;
-        die $e;
-    }
+    my $result = db->select_row($query, $email);
     if (!$result || sha512_hex($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
