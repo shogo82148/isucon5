@@ -229,30 +229,41 @@ SQL
     }
 
     my $entries_of_friends = [];
-    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 10", @$all_friends)}) {
-        my ($title) = split(/\n/, $entry->{body});
-        $entry->{title} = $title;
-        my $owner = $friends{$entry->{user_id}};
-        $entry->{account_name} = $owner->{account_name};
-        $entry->{nick_name} = $owner->{nick_name};
-        push @$entries_of_friends, $entry;
-        last if @$entries_of_friends+0 >= 10;
+
+    my $latest_entries_id = db->select_one("SELECT id FROM entries ORDER BY id DESC LIMIT 1");
+    my $cursor_entries_id = $latest_entries_id;
+    while (scalar(@entries_of_friends) < 10 || $cursor_entries_id <= 0) {
+        for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) AND id <= ? AND id > ? ORDER BY id DESC LIMIT 10", @$all_friends, $cursor_entries_id, $cursor_entries_id - 100)}) {
+            my ($title) = split(/\n/, $entry->{body});
+            $entry->{title} = $title;
+            my $owner = $friends{$entry->{user_id}};
+            $entry->{account_name} = $owner->{account_name};
+            $entry->{nick_name} = $owner->{nick_name};
+            push @$entries_of_friends, $entry;
+            $cursor_entries_id = $entry->{id};
+            last if @$entries_of_friends+0 >= 10;
+        }
     }
 
     my $comments_of_friends = [];
-    for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) ORDER BY id DESC LIMIT 1000", @$all_friends)}) {
-        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
-        $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = $friends{$entry->{user_id}};
-        $entry->{account_name} = $entry_owner->{account_name};
-        $entry->{nick_name} = $entry_owner->{nick_name};
-        $comment->{entry} = $entry;
-        my $comment_owner = $friends{$comment->{user_id}};
-        $comment->{account_name} = $comment_owner->{account_name};
-        $comment->{nick_name} = $comment_owner->{nick_name};
-        push @$comments_of_friends, $comment;
-        last if @$comments_of_friends+0 >= 10;
+    my $latest_comments_id = db->select_one("SELECT id FROM comments ORDER BY id DESC LIMIT 1");
+    my $cursor_comments_id = $latest_comments_id;
+    while (scalar(@entries_of_friends) < 10 || $cursor_entries_id <= 0) {
+        for my $comment (@{db->select_all("SELECT * FROM comments WHERE user_id IN ($friends_placeholder) WHERE id <= ? AND id > ? ORDER BY id DESC LIMIT 1000", @$all_friends, $cursor_comments_id, $cursor_comments_id - 100)}) {
+            my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
+            $entry->{is_private} = ($entry->{private} == 1);
+            next if ($entry->{is_private} && !permitted($entry->{user_id}));
+            my $entry_owner = $friends{$entry->{user_id}};
+            $entry->{account_name} = $entry_owner->{account_name};
+            $entry->{nick_name} = $entry_owner->{nick_name};
+            $comment->{entry} = $entry;
+            my $comment_owner = $friends{$comment->{user_id}};
+            $comment->{account_name} = $comment_owner->{account_name};
+            $comment->{nick_name} = $comment_owner->{nick_name};
+            $cursor_comments_id = $entry->{id};
+            push @$comments_of_friends, $comment;
+            last if @$comments_of_friends+0 >= 10;
+        }
     }
 
     my $query = <<SQL;
