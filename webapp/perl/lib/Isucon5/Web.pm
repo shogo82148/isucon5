@@ -97,7 +97,8 @@ sub current_user {
 
     return undef if (!session()->{user_id});
 
-    $user = db->select_row('SELECT id, account_name, nick_name, email FROM users WHERE id=?', session()->{user_id});
+    my $user_id = session()->{user_id};
+    $user = $Isucon5::Users::USERS->{$user_id} || db->select_row('SELECT id, account_name, nick_name, email FROM users WHERE id=?', session()->{user_id});
     if (!$user) {
         session()->{user_id} = undef;
         abort_authentication_error();
@@ -114,7 +115,7 @@ sub get_user {
 
 sub user_from_account {
     my ($account_name) = @_;
-    my $user = db->select_row('SELECT * FROM users WHERE account_name = ?', $account_name);
+    my $user = $Isucon5::Users::USER_ACCOUNT_NAME_MAP->{$account_name} || db->select_row('SELECT * FROM users WHERE account_name = ?', $account_name);
     abort_content_not_found() if (!$user);
     return $user;
 }
