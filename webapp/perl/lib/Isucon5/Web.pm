@@ -71,7 +71,11 @@ s.salt AS salt, u.passhash AS hash FROM users u
 JOIN salts s ON u.id = s.user_id
 WHERE u.email = ?;
 SQL
-    my $result = db->select_row($query, $email);
+    my $result = eval { db->select_row($query, $email) };
+    if (my $e = $@) {
+        warn $email; warn $password;
+        die $e;
+    }
     if (!$result || sha512_hex($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
