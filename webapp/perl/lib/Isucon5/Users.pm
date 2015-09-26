@@ -35002,3 +35002,5 @@ our $USERS = {
                       'account_name' => 'yesenia4232'
                     }
         };
+
+our $USER_ACCOUNT_NAME_MAP = { map { $USERS{$_}->{account_name} => $USERS{$_} } keys %UESRS };
