@@ -62,3 +62,5 @@ CREATE TABLE IF NOT EXISTS footprints (
   `owner_id` int NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) DEFAULT CHARSET=utf8;
+
+ALTER TABLE comments ADD INDEX (`user_id`);
