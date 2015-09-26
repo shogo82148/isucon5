@@ -6,6 +6,8 @@ use utf8;
 use Kossy;
 use DBIx::Sunny;
 use Encode;
+use Redis::Fast;
+use Data::MessagePack;
 
 my $db;
 sub db {
@@ -25,6 +27,17 @@ sub db {
                 mysql_enable_utf8   => 1,
                 mysql_auto_reconnect => 1,
             },
+        );
+    };
+}
+
+my $redis;
+sub redis {
+    $redis ||= do {
+        Redis::Fast->new(
+            encoding  => undef,
+            reconnect => 5,
+            every     => 200,
         );
     };
 }
@@ -224,22 +237,9 @@ SQL
         last if @$entries_of_friends+0 >= 10;
     }
 
-    my $comments_of_friends = [];
-    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY id DESC LIMIT 1000')}) {
-        next if (!is_friend($comment->{user_id}));
-        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
-        $entry->{is_private} = ($entry->{private} == 1);
-        next if ($entry->{is_private} && !permitted($entry->{user_id}));
-        my $entry_owner = get_user($entry->{user_id});
-        $entry->{account_name} = $entry_owner->{account_name};
-        $entry->{nick_name} = $entry_owner->{nick_name};
-        $comment->{entry} = $entry;
-        my $comment_owner = get_user($comment->{user_id});
-        $comment->{account_name} = $comment_owner->{account_name};
-        $comment->{nick_name} = $comment_owner->{nick_name};
-        push @$comments_of_friends, $comment;
-        last if @$comments_of_friends+0 >= 10;
-    }
+    my $mp = Data::MessagePack->new()->utf8;
+    my $current_user_id = current_user()->{id};
+    my $comments_of_friends = [map { $mp->unpack($_) } redis->lrange("comments_of_friends:$current_user_id", 0, 9)];
 
     my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY id DESC';
     my %friends = ();
@@ -485,6 +485,47 @@ get '/initialize' => sub {
     db->query("DELETE FROM footprints WHERE id > 500000");
     db->query("DELETE FROM entries WHERE id > 500000");
     db->query("DELETE FROM comments WHERE id > 1500000");
+
+    redis->flushall;
+    my $mp = Data::MessagePack->new()->utf8;
+    for my $comment (@{db->select_all('SELECT * FROM comments ORDER BY created_at DESC LIMIT 10')}) {
+        warn $comment->{id};
+        my $entry = db->select_row('SELECT * FROM entries WHERE id = ?', $comment->{entry_id});
+        $entry->{is_private} = ($entry->{private} == 1);
+        my $entry_owner = get_user($entry->{user_id});
+        $entry->{account_name} = $entry_owner->{account_name};
+        $entry->{nick_name} = $entry_owner->{nick_name};
+        $comment->{entry} = $entry;
+        my $comment_owner = get_user($comment->{user_id});
+        $comment->{account_name} = $comment_owner->{account_name};
+        $comment->{nick_name} = $comment_owner->{nick_name};
+        my $comment_mp = $mp->pack($comment);
+
+        my $friends = get_friends($comment->{user_id});
+        if ($entry->{is_private}) {
+            my %f = (
+                map { $_ => 1 } (
+                    @{ get_friends($entry->{user_id}) },
+                    $entry->{user_id},
+                )
+            );
+            $friends = [grep { $f{$_} } @$friends]
+        }
+        for my $friend (@$friends) {
+            redis->lpush("comments_of_friends:$friend", $comment_mp);
+        }
+    }
 };
+
+sub get_friends {
+    my $my_user_id = shift;
+    my $friends_query = 'SELECT * FROM relations WHERE one = ? OR another = ? ORDER BY created_at DESC';
+    my %friends = ();
+    for my $rel (@{db->select_all($friends_query, $my_user_id, $my_user_id)}) {
+        my $key = ($rel->{one} == $my_user_id ? 'another' : 'one');
+        $friends{$rel->{$key}} = 1;
+    }
+    return [keys %friends];
+}
 
 1;
