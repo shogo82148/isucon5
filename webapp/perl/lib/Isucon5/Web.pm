@@ -6,7 +6,7 @@ use utf8;
 use Kossy;
 use DBIx::Sunny;
 use Encode;
-use Digest::SHA qw/sha512_base64/;
+use Digest::SHA qw/sha512_hex/;
 
 my $db;
 sub db {
@@ -65,7 +65,7 @@ JOIN salts s ON u.id = s.user_id
 WHERE u.email = ?;
 SQL
     my $result = db->select_row($query, $email);
-    if (!$result || sha512_base64($password.$result->{salt}) ne $result->{hash}) {
+    if (!$result || sha512_hex($password.$result->{salt}) ne $result->{hash}) {
         abort_authentication_error();
     }
     session()->{user_id} = $result->{id};
