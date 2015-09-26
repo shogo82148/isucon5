@@ -182,6 +182,8 @@ get '/logout' => [qw(set_global)] => sub {
 
 get '/' => [qw(set_global authenticated)] => sub {
     my ($self, $c) = @_;
+    my $friends = get_friends(current_user()->{id});
+    my $friends_placeholder = join ',', ( ('?') x scalar @$friends );
 
     my $profile = db->select_row('SELECT * FROM profiles WHERE user_id = ?', current_user()->{id});
 
@@ -213,7 +215,7 @@ SQL
     }
 
     my $entries_of_friends = [];
-    for my $entry (@{db->select_all('SELECT * FROM entries ORDER BY created_at DESC LIMIT 1000')}) {
+    for my $entry (@{db->select_all("SELECT * FROM entries WHERE user_id IN ($friends_placeholder) ORDER BY created_at DESC LIMIT 10", @$friends)}) {
         next if (!is_friend($entry->{user_id}));
         my ($title) = split(/\n/, $entry->{body});
         $entry->{title} = $title;
